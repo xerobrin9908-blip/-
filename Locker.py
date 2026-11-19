@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import sys, os, base64, tempfile, time, threading, tkinter as tk
+import sys, os, base64, tempfile, time, threading, random, tkinter as tk
 
 try:
     import keyboard
@@ -19,16 +19,20 @@ BLOCKED = ["left windows", "right windows", "alt+tab", "alt+f4",
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Батник кладёт рядом файл sound.b64 (скачанный с GitHub как sound1.b64).
+# sound1.b64 -> sound.b64  (красный экран)
+# voice.b64                (матрица + озвучка)
 SOUND_B64 = os.path.join(SCRIPT_DIR, "sound.b64")
+VOICE_B64 = os.path.join(SCRIPT_DIR, "voice.b64")
 SOUND_WAV = os.path.join(SCRIPT_DIR, "sound.wav")
-_TEMP_WAV = os.path.join(tempfile.gettempdir(), "ch_sound.wav")
+VOICE_WAV = os.path.join(SCRIPT_DIR, "voice.wav")
+
+_TEMP_SOUND = os.path.join(tempfile.gettempdir(), "cyberhack_sound.wav")
+_TEMP_VOICE = os.path.join(tempfile.gettempdir(), "cyberhack_voice.wav")
 
 
-# ----------------------------- ЗВУК ИЗ ФАЙЛА -----------------------------
+# ----------------------------- ЗВУК -----------------------------
 
 def _load_b64_file(path):
-    """Читает base64, выкидывая PEM-заголовки и пустые строки."""
     try:
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             lines = [
@@ -40,35 +44,60 @@ def _load_b64_file(path):
         return None
 
 
+def _decode_b64_to_wav(src, dst):
+    if os.path.exists(dst):
+        return dst
+    if not os.path.exists(src):
+        return None
+    b64 = _load_b64_file(src)
+    if not b64:
+        return None
+    try:
+        data = base64.b64decode(b64, validate=False)
+    except Exception:
+        return None
+    if not data or len(data) < 12:
+        return None
+    if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        return None
+    try:
+        with open(dst, "wb") as f:
+            f.write(data)
+        return dst
+    except Exception:
+        return None
+
+
 def prepare_sound():
-    """Декодирует sound.b64 во временный WAV. Возвращает путь или None."""
-    if os.path.exists(_TEMP_WAV):
-        return _TEMP_WAV
-
-    if os.path.exists(SOUND_B64):
-        b64 = _load_b64_file(SOUND_B64)
-        if b64:
-            try:
-                data = base64.b64decode(b64, validate=False)
-            except Exception:
-                data = None
-            if data and len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
-                try:
-                    with open(_TEMP_WAV, "wb") as f:
-                        f.write(data)
-                    return _TEMP_WAV
-                except Exception:
-                    pass
-
     if os.path.exists(SOUND_WAV):
         return SOUND_WAV
-    return None
+    return _decode_b64_to_wav(SOUND_B64, _TEMP_SOUND)
 
 
-def play_background_sound():
+def prepare_voice():
+    if os.path.exists(VOICE_WAV):
+        return VOICE_WAV
+    return _decode_b64_to_wav(VOICE_B64, _TEMP_VOICE)
+
+
+def play_sound():
+    """sound1.b64 — играет на красном экране."""
     if not HAS_SOUND:
         return
     path = prepare_sound()
+    if not path:
+        return
+    try:
+        winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+    except Exception:
+        pass
+
+
+def play_voice():
+    """voice.b64 — играет на матрице (зациклено)."""
+    if not HAS_SOUND:
+        return
+    path = prepare_voice()
     if not path:
         return
     try:
@@ -80,7 +109,7 @@ def play_background_sound():
         pass
 
 
-def stop_background_sound():
+def stop_all_sounds():
     if HAS_SOUND:
         try:
             winsound.PlaySound(None, winsound.SND_PURGE)
@@ -88,7 +117,16 @@ def stop_background_sound():
             pass
 
 
-# ----------------------------- BEEP-ЗВУКИ -----------------------------
+def play_windows_error():
+    if not HAS_SOUND:
+        return
+    try:
+        winsound.PlaySound("SystemHand", winsound.SND_ALIAS | winsound.SND_ASYNC)
+    except Exception:
+        pass
+
+
+# ----------------------------- BEEP -----------------------------
 
 def _beep_seq(seq, gap=0.0):
     if not HAS_SOUND:
@@ -103,15 +141,6 @@ def _beep_seq(seq, gap=0.0):
             pass
         if gap:
             time.sleep(gap)
-
-
-def sound_startup():
-    def _run():
-        for _ in range(2):
-            _beep_seq([(180, 220), (220, 180), (260, 160),
-                       (400, 120), (700, 90), (1000, 120)])
-            time.sleep(0.15)
-    threading.Thread(target=_run, daemon=True).start()
 
 
 def sound_wrong():
@@ -171,21 +200,31 @@ def unblock_keys():
 
 # ----------------------------- ASCII -----------------------------
 
-ASCII = r"""
- #####  #   # ##### ##### #####  #   #  ###   ####  #   #
-#      #   # #   # #   # #     #   # #   # #     #  #
-#      ##### ##### ##### ####  ##### ##### #     ####
-#      #   # #   # #   # #     #   # #   # #     #  #
- #####  #   # ##### ##### #####  #   # #   #  ####  #   #
+ASCII_CYBERHACK = r"""
+  ██████╗██╗   ██╗██████╗ ███████╗██████╗
+ ██╔════╝╚██╗ ██╔╝██╔══██╗██╔════╝██╔══██╗
+ ██║      ╚████╔╝ ██████╔╝█████╗  ██████╔╝
+ ██║       ╚██╔╝  ██╔══██╗██╔══╝  ██╔══██╗
+ ╚██████╗   ██║   ██████╔╝███████╗██║  ██║
+  ╚═════╝   ╚═╝   ╚═════╝ ╚══════╝╚═╝  ╚═╝
+
+  ██╗  ██╗ █████╗  ██████╗██╗  ██╗
+  ██║  ██║██╔══██╗██╔════╝██║ ██╔╝
+  ███████║███████║██║     █████╔╝
+  ██╔══██║██╔══██║██║     ██╔═██╗
+  ██║  ██║██║  ██║╚██████╗██║  ██╗
+  ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
+
+        ☠  YOUR FILES ARE ENCRYPTED  ☠
+         BY HACKER GROUP  C Y B E R H A C K
 """
 
+
+# ----------------------------- ОКНО -----------------------------
 
 class Locker:
     def __init__(self):
         self.root = tk.Tk()
-
-        # Полноэкранное окно без рамки (overrideredirect + geometry,
-        # а не -fullscreen — они конфликтуют).
         self.root.overrideredirect(True)
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
@@ -193,30 +232,136 @@ class Locker:
         self.root.attributes("-topmost", True)
         self.root.configure(bg="black")
 
-        self.text = tk.Text(self.root, bg="black", fg="#ff3333",
-                            font=("Consolas", 14), bd=0, highlightthickness=0)
-        self.text.pack(fill=tk.BOTH, expand=True)
-        self.text.insert(tk.END, ASCII + "\n")
-        self.text.insert(tk.END, "ALL YOUR FILES ARE ENCRYPTED WITH AES-256\n")
-        self.text.insert(tk.END, "(This is a joke. Nothing is encrypted.)\n\n")
-        self.text.insert(tk.END, "Send 0.5 BTC to: 1CyberHackFakeAddrXXXX\n\n")
-        self.text.insert(tk.END, "3 WRONG PASSWORDS = SYSTEM REBOOT\n")
-        self.text.insert(tk.END, "(Also a joke.)\n\n")
-        self.text.insert(tk.END, "Enter password (digits only): ")
-        self.text.configure(state="disabled")
-
-        self.entry = tk.Entry(self.root, bg="black", fg="lime",
-                              font=("Consolas", 14), insertbackground="lime",
-                              bd=0, highlightthickness=0)
-        self.entry.pack(fill=tk.X, padx=20, pady=10)
-        self.entry.focus_force()
-
         self.attempts = 0
         self.stop_flag = False
         self.sector = 0
-        self.progress_label = tk.Label(self.root, bg="black", fg="lime",
+
+        self.blank = tk.Frame(self.root, bg="black")
+        self.blank.pack(fill=tk.BOTH, expand=True)
+
+        # 1.0 с — красный экран + sound1.b64
+        self.root.after(1000, self._show_red)
+        # 2.0 с — матрица + voice.b64
+        self.root.after(2000, self._start_matrix)
+        # 5.0 с — окно с паролем
+        self.root.after(5000, self._show_password_ui)
+
+    # --------- красный экран ---------
+    def _show_red(self):
+        for w in self.root.winfo_children():
+            w.destroy()
+        self.red = tk.Frame(self.root, bg="#7a0000")
+        self.red.pack(fill=tk.BOTH, expand=True)
+        play_sound()  # sound1.b64
+
+    # --------- матрица + voice ---------
+    def _start_matrix(self):
+        for w in self.root.winfo_children():
+            w.destroy()
+
+        play_voice()  # voice.b64 (зациклено)
+
+        self.canvas = tk.Canvas(self.root, bg="black",
+                                highlightthickness=0, bd=0)
+        self.canvas.pack(fill=tk.BOTH, expand=True)
+
+        self.sw = self.root.winfo_screenwidth()
+        self.sh = self.root.winfo_screenheight()
+
+        self.columns = []
+        step = 22
+        chars = "01CYBERHACKENCRYPTED☠#$%&@!?/\\|"
+        for x in range(0, self.sw, step):
+            self.columns.append({
+                "x": x,
+                "y": random.randint(-self.sh, 0),
+                "speed": random.randint(4, 14),
+                "chars": [random.choice(chars) for _ in range(40)],
+            })
+
+        self.canvas.create_text(
+            self.sw // 2, 80,
+            text="CyberHack",
+            fill="#ff2222",
+            font=("Consolas", 72, "bold"),
+        )
+        self.canvas.create_text(
+            self.sw // 2, 160,
+            text="YOUR FILES ARE ENCRYPTED",
+            fill="#ff4444",
+            font=("Consolas", 22, "bold"),
+        )
+        self.canvas.create_text(
+            self.sw // 2, 200,
+            text="☠  HACKER GROUP CyberHack  ☠",
+            fill="#ff6666",
+            font=("Consolas", 16),
+        )
+
+        self._animate_matrix()
+
+    def _animate_matrix(self):
+        try:
+            self.canvas.delete("rain")
+        except tk.TclError:
+            return
+        for col in self.columns:
+            x = col["x"]
+            y = col["y"]
+            for i, ch in enumerate(col["chars"][:20]):
+                yy = y + i * 18
+                if yy < 220:
+                    continue
+                if yy > self.sh:
+                    continue
+                if i == 0:
+                    color = "#ff6666"
+                elif i < 5:
+                    color = "#ff2222"
+                elif i < 12:
+                    color = "#aa0000"
+                else:
+                    color = "#550000"
+                self.canvas.create_text(
+                    x, yy, text=ch, fill=color,
+                    font=("Consolas", 14, "bold"), tags="rain"
+                )
+            col["y"] += col["speed"]
+            if col["y"] - 20 * 18 > self.sh:
+                col["y"] = random.randint(-self.sh, 0)
+                col["speed"] = random.randint(4, 14)
+
+        self.root.after(60, self._animate_matrix)
+
+    # --------- окно с паролем ---------
+    def _show_password_ui(self):
+        for w in self.root.winfo_children():
+            w.destroy()
+
+        self.root.configure(bg="black")
+
+        self.text = tk.Text(self.root, bg="black", fg="#ff3333",
+                            font=("Consolas", 16), bd=0, highlightthickness=0)
+        self.text.pack(fill=tk.BOTH, expand=True)
+
+        self.text.insert(tk.END, ASCII_CYBERHACK + "\n\n")
+        self.text.insert(tk.END, "Привет, дружище.\n")
+        self.text.insert(tk.END, "Твои данные были зашифрованы\n")
+        self.text.insert(tk.END, "хакерской группировкой CyberHack.\n\n")
+        self.text.insert(tk.END, "Все файлы, фото и документы — [censored].\n")
+        self.text.insert(tk.END, "3 неверных пароля = система в [censored].\n\n")
+        self.text.insert(tk.END, "Введи код (только цифры):\n")
+        self.text.configure(state="disabled")
+
+        self.entry = tk.Entry(self.root, bg="black", fg="lime",
+                              font=("Consolas", 16), insertbackground="lime",
+                              bd=0, highlightthickness=0)
+        self.entry.pack(fill=tk.X, padx=40, pady=10)
+        self.entry.focus_force()
+
+        self.progress_label = tk.Label(self.root, bg="black", fg="#ff3333",
                                        font=("Consolas", 12), anchor="w")
-        self.progress_label.pack(fill=tk.X, padx=20, pady=5)
+        self.progress_label.pack(fill=tk.X, padx=40, pady=5)
 
         self.entry.bind("<Return>", self.check_password)
         threading.Thread(target=self.progress_loop, daemon=True).start()
@@ -239,17 +384,17 @@ class Locker:
         if not pwd.isdigit():
             sound_wrong()
             self.text.configure(state="normal")
-            self.text.insert(tk.END, "\nOnly digits allowed.\n")
+            self.text.insert(tk.END, "\nТолько цифры, [censored].\n")
             self.text.see(tk.END)
             self.text.configure(state="disabled")
             return
 
         if pwd == PASSWORD:
             self.stop_flag = True
-            stop_background_sound()
+            stop_all_sounds()
             sound_correct()
             self.text.configure(state="normal")
-            self.text.insert(tk.END, "\n\nACCESS GRANTED. IT WAS A JOKE.\n")
+            self.text.insert(tk.END, "\n\nДОСТУП РАЗРЕШЁН. ЭТО БЫЛА ШУТКА.\n")
             self.text.see(tk.END)
             self.text.configure(state="disabled")
             unblock_keys()
@@ -261,14 +406,14 @@ class Locker:
 
         if self.attempts >= MAX_ATTEMPTS:
             self.stop_flag = True
-            stop_background_sound()
+            stop_all_sounds()
             unblock_keys()
             self.fake_reboot()
             return
 
         sound_wrong()
         self.text.configure(state="normal")
-        self.text.insert(tk.END, f"\nWrong. {left} attempts left.\n")
+        self.text.insert(tk.END, f"\nНеверный код. Осталось: {left}\n")
         self.text.see(tk.END)
         self.text.configure(state="disabled")
 
@@ -284,14 +429,13 @@ class Locker:
             self.text.see(tk.END)
             self.root.update()
             time.sleep(0.05)
-        self.text.insert(tk.END, "\nJUST KIDDING. NO REBOOT. :)\n")
+        self.text.insert(tk.END, "\nШУТКА. НИКАКОГО РЕБУТА. :)\n")
         sound_final_joke()
         self.root.after(1500, self.root.destroy)
 
     def run(self):
         block_keys()
-        sound_startup()
-        play_background_sound()
+        play_windows_error()  # 0.0 с — ошибка Windows
         self.root.mainloop()
 
 
@@ -300,8 +444,8 @@ if __name__ == "__main__":
         Locker().run()
     except KeyboardInterrupt:
         unblock_keys()
-        stop_background_sound()
+        stop_all_sounds()
         sys.exit(0)
     finally:
         unblock_keys()
-        stop_background_sound()
+        stop_all_sounds()
