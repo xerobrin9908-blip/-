@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
-import sys, time, threading, tkinter as tk
+import sys, os, base64, tempfile, time, threading, tkinter as tk
 
 try:
     import keyboard
 except ImportError:
     sys.exit(1)
 
-# winsound есть только на Windows; на всякий случай оборачиваем
 try:
     import winsound
     HAS_SOUND = True
@@ -18,35 +17,80 @@ MAX_ATTEMPTS = 3
 BLOCKED = ["left windows", "right windows", "alt+tab", "alt+f4",
            "ctrl+esc", "alt+esc", "ctrl+shift+esc"]
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-def block_keys():
-    for k in BLOCKED:
-        try:
-            keyboard.block_key(k)
-        except Exception:
-            pass
+# Батник кладёт рядом файл sound.b64 (скачанный с GitHub как sound1.b64).
+SOUND_B64 = os.path.join(SCRIPT_DIR, "sound.b64")
+SOUND_WAV = os.path.join(SCRIPT_DIR, "sound.wav")
+_TEMP_WAV = os.path.join(tempfile.gettempdir(), "ch_sound.wav")
 
 
-def unblock_keys():
-    # Снимаем блокировку только с тех клавиш, которые мы блокировали
-    for k in BLOCKED:
-        try:
-            keyboard.unblock_key(k)
-        except Exception:
-            pass
-    # Убираем только наши хуки, если они были
+# ----------------------------- ЗВУК ИЗ ФАЙЛА -----------------------------
+
+def _load_b64_file(path):
+    """Читает base64, выкидывая PEM-заголовки и пустые строки."""
     try:
-        # В keyboard нет прямого способа снять только "свои" block_key,
-        # но unhook_all_hotkeys() безопаснее, чем unhook_all()
-        keyboard.unhook_all_hotkeys()
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = [
+                ln.strip() for ln in f
+                if ln.strip() and "CERTIFICATE" not in ln
+            ]
+        return "".join(lines)
+    except Exception:
+        return None
+
+
+def prepare_sound():
+    """Декодирует sound.b64 во временный WAV. Возвращает путь или None."""
+    if os.path.exists(_TEMP_WAV):
+        return _TEMP_WAV
+
+    if os.path.exists(SOUND_B64):
+        b64 = _load_b64_file(SOUND_B64)
+        if b64:
+            try:
+                data = base64.b64decode(b64, validate=False)
+            except Exception:
+                data = None
+            if data and len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+                try:
+                    with open(_TEMP_WAV, "wb") as f:
+                        f.write(data)
+                    return _TEMP_WAV
+                except Exception:
+                    pass
+
+    if os.path.exists(SOUND_WAV):
+        return SOUND_WAV
+    return None
+
+
+def play_background_sound():
+    if not HAS_SOUND:
+        return
+    path = prepare_sound()
+    if not path:
+        return
+    try:
+        winsound.PlaySound(
+            path,
+            winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP
+        )
     except Exception:
         pass
 
 
-# ----------------------------- ЗВУКИ -----------------------------
+def stop_background_sound():
+    if HAS_SOUND:
+        try:
+            winsound.PlaySound(None, winsound.SND_PURGE)
+        except Exception:
+            pass
+
+
+# ----------------------------- BEEP-ЗВУКИ -----------------------------
 
 def _beep_seq(seq, gap=0.0):
-    """seq — список (freq, dur_ms). freq=0 -> пауза."""
     if not HAS_SOUND:
         return
     for freq, dur in seq:
@@ -62,9 +106,7 @@ def _beep_seq(seq, gap=0.0):
 
 
 def sound_startup():
-    """Зловещая «сирена» при старте — в отдельном потоке."""
     def _run():
-        # низкий гул -> высокий писк -> повтор
         for _ in range(2):
             _beep_seq([(180, 220), (220, 180), (260, 160),
                        (400, 120), (700, 90), (1000, 120)])
@@ -73,7 +115,6 @@ def sound_startup():
 
 
 def sound_wrong():
-    """Короткий «отказ» при неверном пароле."""
     threading.Thread(
         target=lambda: _beep_seq([(300, 120), (200, 180)]),
         daemon=True,
@@ -81,7 +122,6 @@ def sound_wrong():
 
 
 def sound_correct():
-    """Победный аккорд при верном пароле."""
     threading.Thread(
         target=lambda: _beep_seq(
             [(523, 90), (659, 90), (784, 90), (1046, 220)]
@@ -91,7 +131,6 @@ def sound_correct():
 
 
 def sound_reboot_tick():
-    """Тихий клик в фейковом ребуте (вызывается по шагу)."""
     if HAS_SOUND:
         try:
             winsound.Beep(900, 20)
@@ -100,13 +139,34 @@ def sound_reboot_tick():
 
 
 def sound_final_joke():
-    """Смешной «неровный» мотив в конце шутки."""
     threading.Thread(
         target=lambda: _beep_seq(
             [(880, 80), (660, 80), (880, 80), (990, 140)]
         ),
         daemon=True,
     ).start()
+
+
+# ----------------------------- КЛАВИШИ -----------------------------
+
+def block_keys():
+    for k in BLOCKED:
+        try:
+            keyboard.block_key(k)
+        except Exception:
+            pass
+
+
+def unblock_keys():
+    for k in BLOCKED:
+        try:
+            keyboard.unblock_key(k)
+        except Exception:
+            pass
+    try:
+        keyboard.unhook_all_hotkeys()
+    except Exception:
+        pass
 
 
 # ----------------------------- ASCII -----------------------------
@@ -124,10 +184,8 @@ class Locker:
     def __init__(self):
         self.root = tk.Tk()
 
-        # --- Полноэкранное окно без рамки и кнопок ---
-        # ВАЖНО: overrideredirect(True) и attributes("-fullscreen", True)
-        # одновременно нельзя — Tkinter выдаёт TclError.
-        # Поэтому делаем вручную через geometry().
+        # Полноэкранное окно без рамки (overrideredirect + geometry,
+        # а не -fullscreen — они конфликтуют).
         self.root.overrideredirect(True)
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
@@ -161,10 +219,8 @@ class Locker:
         self.progress_label.pack(fill=tk.X, padx=20, pady=5)
 
         self.entry.bind("<Return>", self.check_password)
-
         threading.Thread(target=self.progress_loop, daemon=True).start()
 
-    # --------- прогресс ---------
     def progress_loop(self):
         while not self.stop_flag:
             self.sector += 1
@@ -176,7 +232,6 @@ class Locker:
                 return
             time.sleep(0.1)
 
-    # --------- проверка пароля ---------
     def check_password(self, event=None):
         pwd = self.entry.get().strip()
         self.entry.delete(0, tk.END)
@@ -191,6 +246,7 @@ class Locker:
 
         if pwd == PASSWORD:
             self.stop_flag = True
+            stop_background_sound()
             sound_correct()
             self.text.configure(state="normal")
             self.text.insert(tk.END, "\n\nACCESS GRANTED. IT WAS A JOKE.\n")
@@ -205,6 +261,7 @@ class Locker:
 
         if self.attempts >= MAX_ATTEMPTS:
             self.stop_flag = True
+            stop_background_sound()
             unblock_keys()
             self.fake_reboot()
             return
@@ -215,7 +272,6 @@ class Locker:
         self.text.see(tk.END)
         self.text.configure(state="disabled")
 
-    # --------- фейковый ребут ---------
     def fake_reboot(self):
         self.progress_label.config(text="SYSTEM IS REBOOTING...")
         self.text.configure(state="normal")
@@ -232,10 +288,10 @@ class Locker:
         sound_final_joke()
         self.root.after(1500, self.root.destroy)
 
-    # --------- запуск ---------
     def run(self):
         block_keys()
         sound_startup()
+        play_background_sound()
         self.root.mainloop()
 
 
@@ -244,6 +300,8 @@ if __name__ == "__main__":
         Locker().run()
     except KeyboardInterrupt:
         unblock_keys()
+        stop_background_sound()
         sys.exit(0)
     finally:
         unblock_keys()
+        stop_background_sound()
