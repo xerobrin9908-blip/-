@@ -28,13 +28,17 @@ def block_keys():
 
 
 def unblock_keys():
+    # Снимаем блокировку только с тех клавиш, которые мы блокировали
     for k in BLOCKED:
         try:
             keyboard.unblock_key(k)
         except Exception:
             pass
+    # Убираем только наши хуки, если они были
     try:
-        keyboard.unhook_all()
+        # В keyboard нет прямого способа снять только "свои" block_key,
+        # но unhook_all_hotkeys() безопаснее, чем unhook_all()
+        keyboard.unhook_all_hotkeys()
     except Exception:
         pass
 
