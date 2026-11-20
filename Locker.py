@@ -35,7 +35,7 @@ DIR_S_TEXT = [
     r"C:\Windows\System32>dir /s /b",
     r"C:\>del /f /q /s *.*",
     r"C:\>format C: /q",
-    r"C:\>cipher /w:C:\",
+    "C:\\>cipher /w:C:\\",
     r"QCOLD ENCRYPTED",
     r">>> ACCESS DENIED <<<",
     r"C:\>reg delete HKLM\SOFTWARE /f",
