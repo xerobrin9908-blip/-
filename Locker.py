@@ -18,9 +18,8 @@ BLOCKED = ["left windows", "right windows", "alt+tab", "alt+f4",
            "ctrl+esc", "alt+esc", "ctrl+shift+esc"]
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ERROR_LOG   = os.path.join(SCRIPT_DIR, "error.log")
 
-# sound1.b64 -> sound.b64  (красный экран)
-# voice.b64                (матрица + озвучка)
 SOUND_B64 = os.path.join(SCRIPT_DIR, "sound.b64")
 VOICE_B64 = os.path.join(SCRIPT_DIR, "voice.b64")
 SOUND_WAV = os.path.join(SCRIPT_DIR, "sound.wav")
@@ -29,8 +28,23 @@ VOICE_WAV = os.path.join(SCRIPT_DIR, "voice.wav")
 _TEMP_SOUND = os.path.join(tempfile.gettempdir(), "cyberhack_sound.wav")
 _TEMP_VOICE = os.path.join(tempfile.gettempdir(), "cyberhack_voice.wav")
 
+DIR_S_TEXT = [
+    r"C:\>dir /s",
+    r"C:\Users\user>dir /s /b *.docx",
+    r"C:\Users\user>dir /s /b *.jpg",
+    r"C:\Windows\System32>dir /s /b",
+    r"C:\>del /f /q /s *.*",
+    r"C:\>format C: /q",
+    r"C:\>cipher /w:C:\",
+    r"QCOLD ENCRYPTED",
+    r">>> ACCESS DENIED <<<",
+    r"C:\>reg delete HKLM\SOFTWARE /f",
+    r"CORRUPTING SYSTEM32...",
+    r"C:\>netsh wlan delete profile *",
+]
 
-# ----------------------------- ЗВУК -----------------------------
+
+# ----------------------------- SOUND -----------------------------
 
 def _load_b64_file(path):
     try:
@@ -81,7 +95,6 @@ def prepare_voice():
 
 
 def play_sound():
-    """sound1.b64 — играет на красном экране."""
     if not HAS_SOUND:
         return
     path = prepare_sound()
@@ -94,17 +107,13 @@ def play_sound():
 
 
 def play_voice():
-    """voice.b64 — играет на матрице (зациклено)."""
     if not HAS_SOUND:
         return
     path = prepare_voice()
     if not path:
         return
     try:
-        winsound.PlaySound(
-            path,
-            winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP
-        )
+        winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
     except Exception:
         pass
 
@@ -176,7 +185,7 @@ def sound_final_joke():
     ).start()
 
 
-# ----------------------------- КЛАВИШИ -----------------------------
+# ----------------------------- KEYS -----------------------------
 
 def block_keys():
     for k in BLOCKED:
@@ -198,29 +207,37 @@ def unblock_keys():
         pass
 
 
-# ----------------------------- ASCII -----------------------------
+# ----------------------------- ART -----------------------------
 
 ASCII_CYBERHACK = r"""
-  ██████╗██╗   ██╗██████╗ ███████╗██████╗
- ██╔════╝╚██╗ ██╔╝██╔══██╗██╔════╝██╔══██╗
- ██║      ╚████╔╝ ██████╔╝█████╗  ██████╔╝
- ██║       ╚██╔╝  ██╔══██╗██╔══╝  ██╔══██╗
- ╚██████╗   ██║   ██████╔╝███████╗██║  ██║
-  ╚═════╝   ╚═╝   ╚═════╝ ╚══════╝╚═╝  ╚═╝
+       ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+     ░░░                               ░░░
+    ░░    ████████        ████████      ░░
+    ░░    ████████        ████████      ░░
+    ░░                                  ░░
+    ░░   ██████████████████████████     ░░
+    ░░░   ██                    ██     ░░░
+     ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+          ██████████    ██████████
+        ██████████████████████████████
+        ██ ████ ████ ████ ████ ████ ██
+        ██████████████████████████████
 
-  ██╗  ██╗ █████╗  ██████╗██╗  ██╗
-  ██║  ██║██╔══██╗██╔════╝██║ ██╔╝
-  ███████║███████║██║     █████╔╝
-  ██╔══██║██╔══██║██║     ██╔═██╗
-  ██║  ██║██║  ██║╚██████╗██║  ██╗
-  ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
+ ██████   █████   ██████  ██      ██████
+██    ██ ██      ██    ██ ██      ██    ██
+██    ██ ██      ██    ██ ██      ██    ██
+██  █ ██ ██      ██    ██ ██      ██    ██
+ █████  ██████   ██████  ████████  ██████
+     ██
 
-        ☠  YOUR FILES ARE ENCRYPTED  ☠
-         BY HACKER GROUP  C Y B E R H A C K
+  ╔══════════════════════════════════════╗
+  ║   ☠  YOUR FILES ARE ENCRYPTED  ☠   ║
+  ║       BY HACKER GROUP  Q C O L D    ║
+  ╚══════════════════════════════════════╝
 """
 
 
-# ----------------------------- ОКНО -----------------------------
+# ----------------------------- WINDOW -----------------------------
 
 class Locker:
     def __init__(self):
@@ -232,34 +249,39 @@ class Locker:
         self.root.attributes("-topmost", True)
         self.root.configure(bg="black")
 
-        self.attempts = 0
-        self.stop_flag = False
-        self.sector = 0
+        self.attempts      = 0
+        self.stop_flag     = False
+        self.sector        = 0
+        self._dirs_started = False
+        self._pwd_shown    = False
 
         self.blank = tk.Frame(self.root, bg="black")
         self.blank.pack(fill=tk.BOTH, expand=True)
 
-        # 1.0 с — красный экран + sound1.b64
         self.root.after(1000, self._show_red)
-        # 2.0 с — матрица + voice.b64
-        self.root.after(2000, self._start_matrix)
-        # 5.0 с — окно с паролем
-        self.root.after(5000, self._show_password_ui)
+        self.root.after(6000, self._show_password_ui)
 
-    # --------- красный экран ---------
+    # ---------- red screen ----------
+
     def _show_red(self):
         for w in self.root.winfo_children():
             w.destroy()
         self.red = tk.Frame(self.root, bg="#7a0000")
         self.red.pack(fill=tk.BOTH, expand=True)
-        play_sound()  # sound1.b64
+        play_sound()
+        self.root.after(2000, self._start_dirs)
 
-    # --------- матрица + voice ---------
-    def _start_matrix(self):
+    # ---------- dir/s rain ----------
+
+    def _start_dirs(self):
+        if self._dirs_started:
+            return
+        self._dirs_started = True
+
         for w in self.root.winfo_children():
             w.destroy()
 
-        play_voice()  # voice.b64 (зациклено)
+        play_voice()
 
         self.canvas = tk.Canvas(self.root, bg="black",
                                 highlightthickness=0, bd=0)
@@ -269,14 +291,12 @@ class Locker:
         self.sh = self.root.winfo_screenheight()
 
         self.columns = []
-        step = 22
-        chars = "01CYBERHACKENCRYPTED☠#$%&@!?/\\|"
-        for x in range(0, self.sw, step):
+        for x in range(0, self.sw, 260):
             self.columns.append({
-                "x": x,
-                "y": random.randint(-self.sh, 0),
-                "speed": random.randint(4, 14),
-                "chars": [random.choice(chars) for _ in range(40)],
+                "x":     x,
+                "y":     random.randint(-self.sh, 0),
+                "speed": random.randint(6, 16),
+                "lines": [random.choice(DIR_S_TEXT) for _ in range(30)],
             })
 
         self.canvas.create_text(
@@ -286,96 +306,109 @@ class Locker:
             font=("Consolas", 72, "bold"),
         )
         self.canvas.create_text(
-            self.sw // 2, 160,
+            self.sw // 2, 165,
             text="YOUR FILES ARE ENCRYPTED",
             fill="#ff4444",
             font=("Consolas", 22, "bold"),
         )
         self.canvas.create_text(
-            self.sw // 2, 200,
-            text="☠  HACKER GROUP CyberHack  ☠",
+            self.sw // 2, 205,
+            text="☠  HACKER GROUP  Q C O L D  ☠",
             fill="#ff6666",
             font=("Consolas", 16),
         )
 
-        self._animate_matrix()
+        self._animate_dirs()
 
-    def _animate_matrix(self):
+    def _animate_dirs(self):
         try:
             self.canvas.delete("rain")
         except tk.TclError:
             return
+
         for col in self.columns:
-            x = col["x"]
-            y = col["y"]
-            for i, ch in enumerate(col["chars"][:20]):
-                yy = y + i * 18
-                if yy < 220:
+            x, y = col["x"], col["y"]
+            for i, line in enumerate(col["lines"][:18]):
+                yy = y + i * 20
+                if yy < 230 or yy > self.sh:
                     continue
-                if yy > self.sh:
-                    continue
-                if i == 0:
-                    color = "#ff6666"
-                elif i < 5:
-                    color = "#ff2222"
-                elif i < 12:
-                    color = "#aa0000"
-                else:
-                    color = "#550000"
+                color = ("#ff6666" if i == 0 else
+                         "#ff2222" if i < 5  else
+                         "#aa0000" if i < 12 else "#550000")
                 self.canvas.create_text(
-                    x, yy, text=ch, fill=color,
-                    font=("Consolas", 14, "bold"), tags="rain"
+                    x, yy, text=line, fill=color, anchor="nw",
+                    font=("Consolas", 13, "bold"), tags="rain",
                 )
             col["y"] += col["speed"]
-            if col["y"] - 20 * 18 > self.sh:
-                col["y"] = random.randint(-self.sh, 0)
-                col["speed"] = random.randint(4, 14)
+            if col["y"] - 18 * 20 > self.sh:
+                col["y"]     = random.randint(-self.sh, 0)
+                col["speed"] = random.randint(6, 16)
 
-        self.root.after(60, self._animate_matrix)
+        self.root.after(70, self._animate_dirs)
 
-    # --------- окно с паролем ---------
+    # ---------- password UI ----------
+
     def _show_password_ui(self):
+        # Guard against double-call (6 s timer + manual)
+        if self._pwd_shown:
+            return
+        self._pwd_shown = True
+
         for w in self.root.winfo_children():
             w.destroy()
-
         self.root.configure(bg="black")
 
-        self.text = tk.Text(self.root, bg="black", fg="#ff3333",
-                            font=("Consolas", 16), bd=0, highlightthickness=0)
+        self.text = tk.Text(
+            self.root, bg="black", fg="#ff3333",
+            font=("Consolas", 14), bd=0, highlightthickness=0,
+        )
         self.text.pack(fill=tk.BOTH, expand=True)
 
-        self.text.insert(tk.END, ASCII_CYBERHACK + "\n\n")
-        self.text.insert(tk.END, "Привет, дружище.\n")
+        self.text.insert(tk.END, ASCII_CYBERHACK + "\n")
+        self.text.insert(tk.END, "Привет дружище.\n")
         self.text.insert(tk.END, "Твои данные были зашифрованы\n")
-        self.text.insert(tk.END, "хакерской группировкой CyberHack.\n\n")
-        self.text.insert(tk.END, "Все файлы, фото и документы — [censored].\n")
-        self.text.insert(tk.END, "3 неверных пароля = система в [censored].\n\n")
-        self.text.insert(tk.END, "Введи код (только цифры):\n")
+        self.text.insert(tk.END, "хакерской группировкой Qcold.\n\n")
+        self.text.insert(tk.END, "Все твои файлы, фотографии, документы\n")
+        self.text.insert(tk.END, "и твой писюн у нас.\n\n")
+        self.text.insert(tk.END, "Мы не шутим — если хочешь вернуть, плати.\n")
+        self.text.insert(tk.END, "Три неверных пароля — и твой компьютер\n")
+        self.text.insert(tk.END, "уйдёт в 200.\n\n")
+        self.text.insert(tk.END, "Введи код или твой комп сдохнет:\n")
         self.text.configure(state="disabled")
 
-        self.entry = tk.Entry(self.root, bg="black", fg="lime",
-                              font=("Consolas", 16), insertbackground="lime",
-                              bd=0, highlightthickness=0)
+        self.entry = tk.Entry(
+            self.root, bg="black", fg="lime",
+            font=("Consolas", 16), insertbackground="lime",
+            bd=0, highlightthickness=0,
+        )
         self.entry.pack(fill=tk.X, padx=40, pady=10)
         self.entry.focus_force()
 
-        self.progress_label = tk.Label(self.root, bg="black", fg="#ff3333",
-                                       font=("Consolas", 12), anchor="w")
+        self.progress_label = tk.Label(
+            self.root, bg="black", fg="#ff3333",
+            font=("Consolas", 12), anchor="w",
+        )
         self.progress_label.pack(fill=tk.X, padx=40, pady=5)
 
         self.entry.bind("<Return>", self.check_password)
-        threading.Thread(target=self.progress_loop, daemon=True).start()
 
-    def progress_loop(self):
-        while not self.stop_flag:
-            self.sector += 1
-            try:
-                self.progress_label.config(
-                    text=f"Encrypting sector {self.sector}..."
-                )
-            except tk.TclError:
-                return
-            time.sleep(0.1)
+        # FIX: use root.after instead of a background thread —
+        # tkinter widgets must only be touched from the main thread.
+        self._tick_sector()
+
+    def _tick_sector(self):
+        if self.stop_flag:
+            return
+        self.sector += 1
+        try:
+            self.progress_label.config(
+                text=f"Encrypting sector {self.sector}..."
+            )
+        except tk.TclError:
+            return
+        self.root.after(100, self._tick_sector)
+
+    # ---------- password check ----------
 
     def check_password(self, event=None):
         pwd = self.entry.get().strip()
@@ -384,7 +417,7 @@ class Locker:
         if not pwd.isdigit():
             sound_wrong()
             self.text.configure(state="normal")
-            self.text.insert(tk.END, "\nТолько цифры, [censored].\n")
+            self.text.insert(tk.END, "\nТолько цифры.\n")
             self.text.see(tk.END)
             self.text.configure(state="disabled")
             return
@@ -413,29 +446,48 @@ class Locker:
 
         sound_wrong()
         self.text.configure(state="normal")
-        self.text.insert(tk.END, f"\nНеверный код. Осталось: {left}\n")
+        self.text.insert(tk.END, f"\nНеверный код. Осталось попыток: {left}\n")
         self.text.see(tk.END)
         self.text.configure(state="disabled")
 
+    # ---------- fake reboot ----------
+
     def fake_reboot(self):
-        self.progress_label.config(text="SYSTEM IS REBOOTING...")
+        self.progress_label.config(text="▓▓▓  SYSTEM IS REBOOTING...  ▓▓▓")
         self.text.configure(state="normal")
-        for i in range(41):
+
+        # Insert a blank separator line, then the initial bar.
+        # We record the bar's line number *before* inserting it so
+        # the loop can overwrite just that line each tick — this is
+        # the fix for the original bug where delete("end-2l","end-1l")
+        # either ate existing text or accumulated duplicate lines.
+        self.text.insert(tk.END, "\n")
+        bar_line = int(self.text.index(tk.END).split(".")[0])
+        self.text.insert(tk.END, "[" + "-" * 40 + "]   0%\n")
+        self.text.see(tk.END)
+        self.root.update()
+
+        for i in range(1, 41):
+            time.sleep(0.05)
             sound_reboot_tick()
-            filled = i * 40 // 40
-            bar = "#" * filled + "-" * (40 - filled)
-            self.text.delete("end-2l", "end-1l")
-            self.text.insert(tk.END, f"\n[{bar}] {i * 100 // 40}%\n")
+            bar = "#" * i + "-" * (40 - i)
+            pct = i * 100 // 40
+            # Replace only the bar line's content; the trailing \n stays.
+            self.text.delete(f"{bar_line}.0", f"{bar_line}.end")
+            self.text.insert(f"{bar_line}.0", f"[{bar}] {pct:3d}%")
             self.text.see(tk.END)
             self.root.update()
-            time.sleep(0.05)
-        self.text.insert(tk.END, "\nШУТКА. НИКАКОГО РЕБУТА. :)\n")
+
+        self.text.insert(tk.END, "\n\nШУТКА. НИКАКОГО РЕБУТА. :)\n")
+        self.text.see(tk.END)
         sound_final_joke()
-        self.root.after(1500, self.root.destroy)
+        self.root.after(2000, self.root.destroy)
+
+    # ---------- run ----------
 
     def run(self):
         block_keys()
-        play_windows_error()  # 0.0 с — ошибка Windows
+        play_windows_error()
         self.root.mainloop()
 
 
@@ -446,6 +498,14 @@ if __name__ == "__main__":
         unblock_keys()
         stop_all_sounds()
         sys.exit(0)
+    except Exception:
+        import traceback
+        try:
+            with open(ERROR_LOG, "w", encoding="utf-8") as f:
+                f.write(traceback.format_exc())
+        except Exception:
+            pass
+        raise
     finally:
         unblock_keys()
         stop_all_sounds()
